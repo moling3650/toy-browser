@@ -18,7 +18,7 @@ function tagOpenState (char) {
   if (char === '/') {
     return endTagOpenState;
   } else if (/^[a-zA-Z]$/.test(char)) {
-    currentToken = { type: 'start tag', tagName: '' };
+    currentToken = { type: 'start tag', tagName: '', attributes: [] };
     return tagNameState(char);
   } else {
     throw Error('parse error: invalid-first-character-of-tag-name');
@@ -27,7 +27,7 @@ function tagOpenState (char) {
 
 function endTagOpenState (char) {
   if (/^[a-zA-Z]$/.test(char)) {
-    currentToken = { type: 'end tag', tagName: '' };
+    currentToken = { type: 'end tag', tagName: '', attributes: [] };
     return tagNameState(char);
   } else {
     throw Error('parse error: invalid-first-character-of-tag-name');
@@ -35,12 +35,87 @@ function endTagOpenState (char) {
 }
 
 function tagNameState (char) {
-  if (char === '>') {
+  if (/^[\t\n\f ]$/.test(char)) {
+    return beforeAttributeNameState;
+  } else if (char === '>') {
     canEmit = true;
     return dataState;
   } else {
     currentToken.tagName += char.toLowerCase();
     return tagNameState;
+  }
+}
+
+function beforeAttributeNameState(char) {
+  if (/^[\t\n\f ]$/.test(char)) {
+    return beforeAttributeNameState;
+  } else if (char === '>') {
+    return afterAttributeNameState(char);
+  } else {
+    currentAttribte = { name: '', value: '' }
+    currentToken.attributes.push(currentAttribte)
+    return attributeNameState(char);
+  }
+}
+
+function attributeNameState(char) {
+  if (char === '=') {
+    currentToken.attributes[currentAttribte.name] = currentAttribte;
+    return beforeAttributeValueState;
+  } else {
+    currentAttribte.name += char;
+    return attributeNameState;
+  }
+}
+
+function afterAttributeNameState(char) {
+  if (char === '>') {
+    canEmit = true;
+    return dataState;
+  } else {
+    currentAttribte = { name: '', value: '' }
+    currentToken.attributes.push(currentAttribte)
+    return attributeNameState(char);
+  }
+}
+
+function beforeAttributeValueState(char) {
+  if (char === '"') {
+    return attributeValueDoubleQuotedState;
+  } else {
+    return attributeValueUnquotedState(char);
+  }
+}
+
+function attributeValueDoubleQuotedState(char) {
+  if (char === '"') {
+    return afterAttributeValueQuotedState;
+  } else {
+    currentAttribte.value += char;
+    return attributeValueDoubleQuotedState;
+  }
+}
+
+function afterAttributeValueQuotedState(char) {
+  if (/^[\t\n\f ]$/.test(char)) {
+    return beforeAttributeNameState;
+  } else if (char === '>') {
+    canEmit = true;
+    return dataState;
+  } else {
+    throw Error('parse error: missing-whitespace-between-attributes');
+  }
+}
+
+function attributeValueUnquotedState(char) {
+  if (/^[\t\n\f ]$/.test(char)) {
+    return beforeAttributeNameState;
+  } else if (char === '>') {
+    canEmit = true;
+    return dataState;
+  } else {
+    currentAttribte.value += char;
+    return attributeValueUnquotedState;
   }
 }
 
@@ -76,7 +151,7 @@ function parse(tokens) {
     }
     if (token.type === 'start tag') {
       // 创建元素节点
-      var elementNode = { nodeName: token.tagName, childNodes: [] }
+      var elementNode = { nodeName: token.tagName, attributes: token.attributes, childNodes: [] }
       topElemnt.childNodes.push(elementNode); // 建立父子节点关系
       stack.push(elementNode); // 把新打开的元素入栈。成为当前打开元素
     } else if (token.type === 'end tag') {
@@ -86,7 +161,7 @@ function parse(tokens) {
   return stack[0];
 }
 
-var html = '<p>hello <span>world</span></p>';
+var html = '<p id="p1" class="text t-2">hello <span class="word">world</span></p>';
 var tokens = tokenization(html);
 var dom = parse(tokens);
 
